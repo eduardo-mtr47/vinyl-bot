@@ -1,0 +1,16 @@
+wishlist = [
+    {
+        "artist": "Nujabes",
+        "title": "Modal Soul",
+        "release_id": 13856056,
+        "edition_keywords": ["translucent", "yellow"],
+        "max_price": 40
+    },
+    {
+        "artist": "J Dilla",
+        "title": "Donuts",
+        "release_id": 853669,
+        "edition_keywords": [],
+        "max_price": 30
+    }
+]
