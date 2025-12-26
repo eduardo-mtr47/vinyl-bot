@@ -1,66 +1,75 @@
+import re
 import cloudscraper
 from bs4 import BeautifulSoup
 
-def get_offers_for_release(release_id):
-    url = f"https://www.discogs.com/sell/release/{release_id}"
+def parse_price(raw_price: str):
+    """
+    Extrait le prix et le convertit en EUR si besoin
+    """
+    text = raw_price.replace(",", ".").lower()
 
+    # EUR
+    eur = re.search(r"€\s*([\d.]+)", text)
+    if eur:
+        return float(eur.group(1))
+
+    # GBP → EUR (approx)
+    gbp = re.search(r"£\s*([\d.]+)", text)
+    if gbp:
+        return round(float(gbp.group(1)) * 1.15, 2)
+
+    # USD → EUR (approx)
+    usd = re.search(r"\$\s*([\d.]+)", text)
+    if usd:
+        return round(float(usd.group(1)) * 0.92, 2)
+
+    return None
+
+
+def get_offers_for_release(release_id: int):
+    url = f"https://www.discogs.com/sell/release/{release_id}"
     print(f"\n🌐 Requête vers {url}")
-    
+
     scraper = cloudscraper.create_scraper(
-        browser={
-            'custom': 'ScraperBot/1.0'
-        }
+        browser={"custom": "VinylFinderBot/1.0"}
     )
 
     try:
-        response = scraper.get(url)
+        response = scraper.get(url, timeout=20)
         print(f"🔁 Statut HTTP : {response.status_code}")
 
-        if response.status_code == 403:
-            print("⛔️ Accès toujours interdit (403), même avec cloudscraper.")
-            return []
-
         if response.status_code != 200:
-            print(f"❌ Échec de la requête : code {response.status_code}")
+            print("⛔️ Accès refusé ou page indisponible.")
             return []
 
-        soup = BeautifulSoup(response.text, 'html.parser')
-        listings = soup.select(".shortcut_navigable")
-
-        print(f"🔍 {len(listings)} offres trouvées dans le HTML.")
+        soup = BeautifulSoup(response.text, "html.parser")
+        rows = soup.select(".shortcut_navigable")
+        print(f"🔍 {len(rows)} offres trouvées dans le HTML.")
 
         offers = []
 
-        for idx, item in enumerate(listings, 1):
-            price_tag = item.select_one(".price")
-            condition_tag = item.select_one(".item_condition")
-            seller_tag = item.select_one(".seller_info")
+        for row in rows:
+            price_tag = row.select_one(".price")
+            condition_tag = row.select_one(".item_condition")
+            seller_tag = row.select_one(".seller_info")
 
-            price = None
-            import re  # à mettre en haut du fichier s'il n'y est pas déjà
+            if not price_tag or not seller_tag:
+                continue
 
-            price = None
-            if price_tag:
-                price_text = price_tag.text.strip()
-                # Supprimer toutes les lettres et symboles sauf chiffres et ponctuation
-                price_clean = re.sub(r'[^\d.,]', '', price_text).replace(',', '.')
-                try:
-                    price = float(price_clean)
-                except ValueError:
-                    print(f"⚠️ Erreur parsing prix : {price_text}")
+            raw_price = price_tag.get_text(" ", strip=True)
+            price_eur = parse_price(raw_price)
 
-            offer = {
-                "price": price,
-                "condition": condition_tag.text.strip() if condition_tag else "",
-                "seller": seller_tag.text.strip() if seller_tag else "",
-            }
+            shipping = "inclus" if "shipping" not in raw_price.lower() else "non inclus"
 
-            print(f"📦 Offre #{idx} : {offer}")
-            offers.append(offer)
+            offers.append({
+                "price_eur": price_eur,
+                "shipping": shipping,
+                "condition": condition_tag.get_text(" ", strip=True) if condition_tag else "N/A",
+                "seller": seller_tag.get_text(" ", strip=True)
+            })
 
         return offers
 
     except Exception as e:
-        print(f"❌ Exception : {e}")
+        print(f"❌ Erreur scraping : {e}")
         return []
-    
