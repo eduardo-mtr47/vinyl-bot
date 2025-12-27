@@ -1,9 +1,24 @@
 import json
+import os
 import requests
 from scraper import get_offers_for_release
 from notifier import send_discord_message
 
+SEEN_FILE = "seen_offers.json"
 EXCHANGE_API = "https://api.frankfurter.app/latest"
+
+# Chargement des offres déjà vues
+if os.path.exists(SEEN_FILE):
+    with open(SEEN_FILE, "r") as f:
+        seen_offers = set(json.load(f))
+else:
+    seen_offers = set()
+
+
+def save_seen_offers():
+    with open(SEEN_FILE, "w") as f:
+        json.dump(list(seen_offers), f)
+
 
 def convert_to_eur(amount, currency):
     if amount is None or currency is None:
@@ -31,13 +46,17 @@ def convert_to_eur(amount, currency):
         data = r.json()
         rate = data["rates"]["EUR"]
         return round(amount * rate, 2)
+
     except Exception as e:
         print(f"⚠️ Conversion error for {amount} {currency}: {e}")
         return None
 
+
 def main():
     with open("wishlist.json", "r") as f:
         wishlist = json.load(f)
+
+    new_seen = False
 
     for item in wishlist:
         release_id = item["release_id"]
@@ -51,6 +70,11 @@ def main():
         valid = []
 
         for offer in offers:
+            url = offer.get("url")
+
+            if url and url in seen_offers:
+                continue
+
             price = offer["price"]
             currency = offer["currency"]
             price_eur = convert_to_eur(price, currency)
@@ -60,7 +84,12 @@ def main():
 
             if price_eur <= max_price:
                 offer["price_eur"] = price_eur
+                offer["title"] = title  # Ajout du titre dans l'offre
                 valid.append(offer)
+
+                if url:
+                    seen_offers.add(url)
+                    new_seen = True
 
         if not valid:
             print(f"❌ Aucune offre ≤ {max_price} €.")
@@ -78,13 +107,11 @@ def main():
             print("———")
 
             # Envoi Discord
-            msg = f"""📀 **{title}** — Offre #{idx}
-            💰 `{offer['price']} {offer['currency']}` → **{offer['price_eur']} €**
-            🏷️ {offer['condition'].strip()}
-            🛒 {offer['seller'].strip()}
-            🔗 {offer['url']}
-            """
-            send_discord_message(msg)
+            send_discord_message(offer)  # plus d’erreur ici
+
+    if new_seen:
+        save_seen_offers()
+
 
 if __name__ == "__main__":
     main()
