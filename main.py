@@ -1,8 +1,11 @@
-import json
 import os
+import json
 import requests
 from scraper import get_offers_for_release
-from notifier import send_discord_message
+from notifier import send_discord_message, DISCORD_WEBHOOK_URL
+from dotenv import load_dotenv
+
+load_dotenv()
 
 SEEN_FILE = "seen_offers.json"
 EXCHANGE_API = "https://api.frankfurter.app/latest"
@@ -13,7 +16,6 @@ if os.path.exists(SEEN_FILE):
         seen_offers = set(json.load(f))
 else:
     seen_offers = set()
-
 
 def save_seen_offers():
     with open(SEEN_FILE, "w") as f:
@@ -46,13 +48,38 @@ def convert_to_eur(amount, currency):
         data = r.json()
         rate = data["rates"]["EUR"]
         return round(amount * rate, 2)
-
     except Exception as e:
         print(f"⚠️ Conversion error for {amount} {currency}: {e}")
         return None
 
 
+def sanity_check():
+    print("✅ Vérification des prérequis...\n")
+
+    # Vérification du fichier wishlist
+    if not os.path.exists("wishlist.json"):
+        print("❌ wishlist.json manquant.")
+        return False
+    else:
+        print("📄 wishlist.json trouvé.")
+
+    # Vérification webhook Discord
+    if not DISCORD_WEBHOOK_URL:
+        print("❌ DISCORD_WEBHOOK_URL manquant.")
+        return False
+    else:
+        print("🌐 Webhook Discord OK.")
+
+    print("✅ Tous les prérequis sont OK.\n")
+    return True
+
+
+
 def main():
+    if not sanity_check():
+        print("❌ Arrêt du script.")
+        return
+
     with open("wishlist.json", "r") as f:
         wishlist = json.load(f)
 
@@ -70,26 +97,25 @@ def main():
         valid = []
 
         for offer in offers:
-            url = offer.get("url")
+            url = offer.get("url") or f"https://www.discogs.com/sell/release/{release_id}"
 
-            if url and url in seen_offers:
+            if url in seen_offers:
                 continue
 
             price = offer["price"]
             currency = offer["currency"]
             price_eur = convert_to_eur(price, currency)
 
-            if price_eur is None:
+            if price_eur is None or price_eur > max_price:
                 continue
 
-            if price_eur <= max_price:
-                offer["price_eur"] = price_eur
-                offer["title"] = title  # Ajout du titre dans l'offre
-                valid.append(offer)
+            offer["price_eur"] = price_eur
+            offer["url"] = url
+            offer["title"] = title
 
-                if url:
-                    seen_offers.add(url)
-                    new_seen = True
+            valid.append(offer)
+            seen_offers.add(url)
+            new_seen = True
 
         if not valid:
             print(f"❌ Aucune offre ≤ {max_price} €.")
@@ -105,9 +131,7 @@ def main():
             print(f"🛒 Vendeur         : {offer['seller']}")
             print(f"🔗 Lien            : {offer['url']}")
             print("———")
-
-            # Envoi Discord
-            send_discord_message(offer)  # plus d’erreur ici
+            send_discord_message(offer)
 
     if new_seen:
         save_seen_offers()
