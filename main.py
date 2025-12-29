@@ -1,38 +1,39 @@
-import os
 import json
+import os
 import requests
 from scraper import get_offers_for_release
-from notifier import send_discord_message, DISCORD_WEBHOOK_URL
+from notifier import send_discord_message
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+# Chargement des variables d'environnement depuis .env
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
-SEEN_FILE = "seen_offers.json"
+SEEN_FILE = "sent_offers.json"
 EXCHANGE_API = "https://api.frankfurter.app/latest"
 
-# Chargement des offres déjà vues
-if os.path.exists(SEEN_FILE):
-    with open(SEEN_FILE, "r") as f:
-        seen_offers = set(json.load(f))
-else:
-    seen_offers = set()
+def load_seen_offers():
+    if os.path.exists(SEEN_FILE):
+        with open(SEEN_FILE, "r") as f:
+            try:
+                return set(json.load(f))
+            except json.JSONDecodeError:
+                print("⚠️ Erreur dans sent_offers.json. Fichier réinitialisé.")
+                return set()
+    return set()
 
-def save_seen_offers():
+def save_seen_offers(data):
     with open(SEEN_FILE, "w") as f:
-        json.dump(list(seen_offers), f)
-
+        json.dump(list(data), f)
 
 def convert_to_eur(amount, currency):
     if amount is None or currency is None:
         return None
 
     currency_map = {
-        "€": "EUR",
-        "$": "USD",
-        "£": "GBP",
-        "DKK": "DKK",
-        "AUD": "AUD",
-        "CAD": "CAD"
+        "€": "EUR", "$": "USD", "£": "GBP",
+        "DKK": "DKK", "AUD": "AUD", "CAD": "CAD",
+        "USD": "USD", "GBP": "GBP"
     }
 
     base = currency_map.get(currency)
@@ -43,47 +44,51 @@ def convert_to_eur(amount, currency):
         return round(amount, 2)
 
     try:
-        url = f"https://api.frankfurter.app/latest?from={base}&to=EUR"
+        url = f"{EXCHANGE_API}?from={base}&to=EUR"
         r = requests.get(url, timeout=5)
-        data = r.json()
-        rate = data["rates"]["EUR"]
+        r.raise_for_status()
+        rate = r.json()["rates"]["EUR"]
         return round(amount * rate, 2)
     except Exception as e:
         print(f"⚠️ Conversion error for {amount} {currency}: {e}")
         return None
 
+def check_prerequisites():
+    print("\n✅ Vérification des prérequis...")
 
-def sanity_check():
-    print("✅ Vérification des prérequis...\n")
-
-    # Vérification du fichier wishlist
     if not os.path.exists("wishlist.json"):
         print("❌ wishlist.json manquant.")
         return False
-    else:
-        print("📄 wishlist.json trouvé.")
+    print("📄 wishlist.json trouvé.")
 
-    # Vérification webhook Discord
-    if not DISCORD_WEBHOOK_URL:
-        print("❌ DISCORD_WEBHOOK_URL manquant.")
+    webhook = os.getenv("DISCORD_WEBHOOK_URL")
+    if not webhook:
+        print("❌ DISCORD_WEBHOOK_URL manquant dans .env")
         return False
-    else:
+
+    try:
+        resp = requests.head(webhook, timeout=5)
+        if resp.status_code >= 400:
+            print(f"❌ Webhook invalide (HTTP {resp.status_code})")
+            return False
         print("🌐 Webhook Discord OK.")
+    except Exception as e:
+        print(f"❌ Erreur lors de la vérification du webhook : {e}")
+        return False
 
     print("✅ Tous les prérequis sont OK.\n")
     return True
 
-
-
 def main():
-    if not sanity_check():
+    if not check_prerequisites():
         print("❌ Arrêt du script.")
         return
 
+    seen_offers = load_seen_offers()
+    new_seen = False
+
     with open("wishlist.json", "r") as f:
         wishlist = json.load(f)
-
-    new_seen = False
 
     for item in wishlist:
         release_id = item["release_id"]
@@ -94,36 +99,56 @@ def main():
         print(f"🔍 Recherche d’offres pour release ID {release_id} (max {max_price} €)...")
 
         offers = get_offers_for_release(release_id)
-        valid = []
+        print(f"➡️ {len(offers)} offres récupérées")
+
+        valid_offers = []
 
         for offer in offers:
-            url = offer.get("url") or f"https://www.discogs.com/sell/release/{release_id}"
+            offer["title"] = title  # Ajoute le titre pour notification et fallback ID
+
+            url = offer.get("url")
+
+            # Fallback identifiant si URL absente
+            if not url:
+                fallback_parts = [
+                    offer.get("title", ""),
+                    str(offer.get("price", "")),
+                    offer.get("seller", "")
+                ]
+                url = "_".join(fallback_parts)
+                offer["url"] = ""  # Laisser vide pour l'affichage
 
             if url in seen_offers:
+                print(f"⏩ Offre déjà envoyée : {url}")
                 continue
 
             price = offer["price"]
             currency = offer["currency"]
             price_eur = convert_to_eur(price, currency)
+            offer["price_eur"] = price_eur
 
-            if price_eur is None or price_eur > max_price:
+            print(f"\n🔍 Offre brute : {price} {currency} (→ {price_eur} €) | Max : {max_price} €")
+
+            if price_eur is None:
+                print("⛔ Ignorée (conversion impossible).")
                 continue
 
-            offer["price_eur"] = price_eur
-            offer["url"] = url
-            offer["title"] = title
+            if price_eur <= max_price:
+                print("✅ Offre acceptée !")
+                valid_offers.append(offer)
+                if url:
+                    seen_offers.add(url)
+                    new_seen = True
+            else:
+                print("⛔ Trop cher.")
 
-            valid.append(offer)
-            seen_offers.add(url)
-            new_seen = True
-
-        if not valid:
+        if not valid_offers:
             print(f"❌ Aucune offre ≤ {max_price} €.")
             continue
 
-        print(f"✅ {len(valid)} offre(s) trouvée(s) ≤ {max_price} € :\n")
+        print(f"✅ {len(valid_offers)} offre(s) trouvée(s) ≤ {max_price} € :\n")
 
-        for idx, offer in enumerate(valid, 1):
+        for idx, offer in enumerate(valid_offers, 1):
             print(f"📦 Offre #{idx}")
             print(f"💰 Prix brut       : {offer['price']} {offer['currency']}")
             print(f"💱 Converti (EUR)  : {offer['price_eur']} €")
@@ -131,11 +156,11 @@ def main():
             print(f"🛒 Vendeur         : {offer['seller']}")
             print(f"🔗 Lien            : {offer['url']}")
             print("———")
+
             send_discord_message(offer)
 
     if new_seen:
-        save_seen_offers()
-
+        save_seen_offers(seen_offers)
 
 if __name__ == "__main__":
     main()
