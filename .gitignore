@@ -1,1 +1,6 @@
 .env
+*.env
+sent_offers.json
+cron.log
+__pycache__/
+venv/
