@@ -2,7 +2,6 @@ import os
 import requests
 from dotenv import load_dotenv
 
-# Charger les variables d'environnement
 load_dotenv()
 
 DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")

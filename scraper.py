@@ -7,7 +7,6 @@ def extract_price_and_currency(price_text):
     currency_match = re.search(r'(€|£|\$|USD|GBP|CAD|AUD|DKK)', raw)
     currency = currency_match.group(1) if currency_match else None
 
-    # Nettoyage du texte numérique
     amount_str = re.sub(r'[^\d,\.]', '', raw)
     if ',' in amount_str and '.' in amount_str:
         if amount_str.index(',') > amount_str.index('.'):

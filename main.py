@@ -6,7 +6,6 @@ from notifier import send_discord_message
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Chargement des variables d'environnement depuis .env
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 SEEN_FILE = "sent_offers.json"
@@ -104,11 +103,10 @@ def main():
         valid_offers = []
 
         for offer in offers:
-            offer["title"] = title  # Ajoute le titre pour notification et fallback ID
+            offer["title"] = title
 
             url = offer.get("url")
 
-            # Fallback identifiant si URL absente
             if not url:
                 fallback_parts = [
                     offer.get("title", ""),
@@ -116,7 +114,7 @@ def main():
                     offer.get("seller", "")
                 ]
                 url = "_".join(fallback_parts)
-                offer["url"] = ""  # Laisser vide pour l'affichage
+                offer["url"] = ""
 
             if url in seen_offers:
                 print(f"⏩ Offre déjà envoyée : {url}")
@@ -156,7 +154,7 @@ def main():
             print(f"🛒 Vendeur         : {offer['seller']}")
             print(f"🔗 Lien            : {offer['url']}")
             print("———")
-            
+
             offer["release_id"] = release_id
             send_discord_message(offer)
 
