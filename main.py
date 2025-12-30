@@ -156,7 +156,8 @@ def main():
             print(f"🛒 Vendeur         : {offer['seller']}")
             print(f"🔗 Lien            : {offer['url']}")
             print("———")
-
+            
+            offer["release_id"] = release_id
             send_discord_message(offer)
 
     if new_seen:

@@ -3,23 +3,29 @@ import requests
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Charge le fichier .env depuis le même dossier que ce script
+# Charge le .env
 env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
+DISCORD_USER_ID = os.getenv("DISCORD_USER_ID")  # ← À ajouter dans ton .env
 
 if not DISCORD_WEBHOOK_URL:
-    raise ValueError("⚠️ DISCORD_WEBHOOK_URL n'est pas défini dans les variables d'environnement.")
+    raise ValueError("⚠️ DISCORD_WEBHOOK_URL n'est pas défini.")
 
 def send_discord_message(offer):
     try:
+        mention = f"<@{DISCORD_USER_ID}>" if DISCORD_USER_ID else ""
+        release_id = offer.get("release_id", "")
+        link = f"https://www.discogs.com/sell/release/{release_id}" if release_id else "https://www.discogs.com/"
+
         content = (
+            f"{mention}\n"
             f"**{offer['title']}**\n"
             f"💰 {offer['price']} {offer['currency']} (~{offer['price_eur']} €)\n"
             f"🏷️ {offer['condition']}\n"
             f"🛒 {offer['seller']}\n"
-            f"🔗 {offer['url'] or 'https://www.discogs.com'}"
+            f"🔗 {link}"
         )
 
         response = requests.post(
