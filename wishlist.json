@@ -7,9 +7,28 @@
     },
     {
          "release_id": 9412062,
-        "max_price": 400,
+        "max_price": 350,
         "title": "Frank-Ocean-Blond",
-        "comments": "Black Friday Edition"
+        "comments": "Black Friday Edition",
+        "etat":"disque = Mint / pochette = vg+"
+    },
+    {
+        "release_id": 33337214,
+        "max_price": 18,
+        "title": "Don Toliver– Heaven Or Hell",
+        "comments": "Store Day, Limited Edition , purple vinyl"
+    },
+    {
+        "release_id": 22900745,
+        "max_price": 100,
+        "title": "Green-Montana-Nostalgia",
+        "comments": "Vinyl Nostalgia ++"
+    },
+    {
+        "release_id": 30450851,
+        "max_price": 50,
+        "title": "Green-Montana-Saudade",
+        "comments": "Vinyl White, Alternate Artwork"
     }
 ]
 

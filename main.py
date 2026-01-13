@@ -104,20 +104,12 @@ def main():
 
         for offer in offers:
             offer["title"] = title
+            offer["release_id"] = release_id
 
-            url = offer.get("url")
-
-            if not url:
-                fallback_parts = [
-                    offer.get("title", ""),
-                    str(offer.get("price", "")),
-                    offer.get("seller", "")
-                ]
-                url = "_".join(fallback_parts)
-                offer["url"] = ""
-
-            if url in seen_offers:
-                print(f"⏩ Offre déjà envoyée : {url}")
+            # ✅ Identifiant unique basé sur vendeur + prix + condition
+            offer_id = f"{offer.get('seller')}_{offer.get('price')}_{offer.get('condition')}"
+            if offer_id in seen_offers:
+                print(f"⏩ Offre déjà envoyée : {offer_id}")
                 continue
 
             price = offer["price"]
@@ -134,9 +126,8 @@ def main():
             if price_eur <= max_price:
                 print("✅ Offre acceptée !")
                 valid_offers.append(offer)
-                if url:
-                    seen_offers.add(url)
-                    new_seen = True
+                seen_offers.add(offer_id)
+                new_seen = True
             else:
                 print("⛔ Trop cher.")
 
@@ -152,10 +143,9 @@ def main():
             print(f"💱 Converti (EUR)  : {offer['price_eur']} €")
             print(f"🏷️ Condition       : {offer['condition']}")
             print(f"🛒 Vendeur         : {offer['seller']}")
-            print(f"🔗 Lien            : {offer['url']}")
+            print(f"🔗 Lien            : https://www.discogs.com/sell/release/{release_id}")
             print("———")
 
-            offer["release_id"] = release_id
             send_discord_message(offer)
 
     if new_seen:
